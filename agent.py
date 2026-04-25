@@ -1,24 +1,30 @@
 import json
-import anthropic
+from openai import OpenAI
 from transitions import TRANSITIONS
+from config import OPENAI_API_KEY
 
-client = anthropic.Anthropic()
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 TRANSITION_LIST = "\n".join(f"  - {k}: {v}" for k, v in TRANSITIONS.items())
 
 
 def design_transitions(prompt_a: str, prompt_b: str, style: str, feedback: str = "") -> list[dict]:
-    """Ask Claude to suggest 3 transition options between two clips."""
+    """Ask GPT to suggest 3 transition options between two clips."""
 
     feedback_line = f"\nUser feedback on previous options: {feedback}" if feedback else ""
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
+    response = client.chat.completions.create(
+        model="gpt-4o",
         max_tokens=1024,
+        response_format={"type": "json_object"},
         messages=[
             {
+                "role": "system",
+                "content": "You are a creative video editor. Always respond with valid JSON only.",
+            },
+            {
                 "role": "user",
-                "content": f"""You are a creative video editor designing transitions.
+                "content": f"""Design transitions between two video clips.
 
 Clip A prompt: {prompt_a}
 Clip B prompt: {prompt_b}
@@ -30,15 +36,17 @@ Available transitions:
 Suggest exactly 3 different transitions that fit the visual and emotional shift.
 Vary your choices — don't suggest the same transition type twice.
 
-Respond ONLY with a JSON array, no markdown:
-[
-  {{"transition": "fade", "duration": 1.0, "why": "一句话说明为什么适合这个切换"}},
-  {{"transition": "zoom_in", "duration": 0.8, "why": "..."}},
-  {{"transition": "wipe_left", "duration": 0.6, "why": "..."}}
-]""",
-            }
+Respond with this JSON structure:
+{{
+  "transitions": [
+    {{"transition": "fade", "duration": 1.0, "why": "一句话说明为什么适合这个切换"}},
+    {{"transition": "zoom_in", "duration": 0.8, "why": "..."}},
+    {{"transition": "wipe_left", "duration": 0.6, "why": "..."}}
+  ]
+}}""",
+            },
         ],
     )
 
-    text = response.content[0].text.strip()
-    return json.loads(text)
+    data = json.loads(response.choices[0].message.content)
+    return data["transitions"]
